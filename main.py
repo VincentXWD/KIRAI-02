@@ -118,7 +118,11 @@ CONNECTED_THRESHOLD = 1
 def RegionGrowing(image):
   assert isinstance(image, sitk.Image) and image.GetPixelID() == sitk.sitkUInt8
   # 各向异性滤波处理
-  image = sitk.GradientAnisotropicDiffusion(sitk.Cast(image, sitk.sitkFloat32))
+  gradient_filter = sitk.GradientAnisotropicDiffusionImageFilter()
+  gradient_filter.SetNumberOfIterations(30) # default: 15
+  gradient_filter.SetTimeStep(0.0625)
+  gradient_filter.SetConductanceParameter(3.0)
+  image = gradient_filter.Execute(image)
   image = sitk.Cast(image, sitk.sitkUInt8)
 
   seg = sitk.Image(image.GetSize(), sitk.sitkUInt8)
