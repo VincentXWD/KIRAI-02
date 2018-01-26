@@ -18,7 +18,6 @@ def CheckPixel(p1, p2):
   return p1[0] == p2[0] and p1[1] == p2[1] and p1[2] == p2[2]
 
 
-# TODO: 种子选取问题
 def GetLiverSeed(pred_png_name):
   pred_image = cv2.imread(pred_image_name)
   seed = [0, 0]
@@ -44,7 +43,7 @@ def GetTumorSeed(pred_png_name):
       if CheckPixel(pred_image[i, j], [255, 255, 255]):
         seed.append([j, i])
   if len(seed) == 0:
-    print 'Warning: this image does not have tumor pixels.'
+    print('Warning: this image does not have tumor pixels.')
     return -1
   return seed
 
@@ -78,7 +77,7 @@ def LevelSetCut(image, seed):
   factor = 3.5
   lower_threshold = stats.GetMean(1) - factor * stats.GetSigma(1)
   upper_threshold = stats.GetMean(1) + factor * stats.GetSigma(1)
-  print 'the lower_threshold and upper_threshold :', lower_threshold, upper_threshold
+  print('the lower_threshold and upper_threshold :', lower_threshold, upper_threshold)
 
   init_ls = sitk.SignedMaurerDistanceMap(seg, insideIsPositive=True, useImageSpacing=True)
   lsFilter = sitk.ThresholdSegmentationLevelSetImageFilter()
@@ -92,8 +91,8 @@ def LevelSetCut(image, seed):
   ls = lsFilter.Execute(init_ls, sitk.Cast(image, sitk.sitkFloat32))
 
   assert isinstance(ls, sitk.Image)
-  print ls.GetPixelIDTypeAsString()
-  print ls.GetDimension()
+  print(ls.GetPixelIDTypeAsString())
+  print(ls.GetDimension())
   # myshow(sitk.LabelOverlay(image, sitk.LabelContour(ls>0), 1.0))
   myshow(sitk.LabelOverlay(image, ls>0), 'Level Set Segmentation')
   # return sitk.LabelOverlay(image, ls>0)

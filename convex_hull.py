@@ -53,5 +53,5 @@ def convex_hull(point_list):
 if __name__ == '__main__':
   test_data = [(i, i ** 2) for i in range(1, 100)]
   result = convex_hull(test_data)
-  print result
+  print(result)
 

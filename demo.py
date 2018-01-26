@@ -4,9 +4,10 @@ import SimpleITK as sitk
 from myshow import *
 import math
 
-raw_image_name =   './images/raw_jpg/sample-117/sample-117-slice-429.jpg'
-mask_image_name = './images/mask_png/sample-117/sample-117-slice-429.png'
-pred_image_name = './images/pred_png/sample-117/sample-117-slice-429.png'
+raw_image_name =   './images/raw_jpg/sample-15/sample-15-slice-1.jpg'
+mask_image_name = './images/mask_png/sample-15/sample-15-slice-1.png'
+pred_image_name = './images/pred_png/sample-15/sample-15-slice-1.png'
+save_path =                                 './sample-15-slice-1.png'
 
 
 def get_predicted_liver_label():
@@ -57,7 +58,7 @@ def get_tumor_seed():
         vis[tx][ty] = 1
         ret.append([tx, ty])
         q.append([tx, ty])
-    print len(ret)
+    print(len(ret))
     return ret
 
   for i in range(0, size[0]):
@@ -73,7 +74,7 @@ def get_tumor_seed():
         tx /= len(ret)
         ty /= len(ret)
         seed.append([tx, ty])
-  print len(seed)
+  print(len(seed))
   return seed
 
 
@@ -85,7 +86,7 @@ def level_set_cut(image, seed):
 
   seed = map(lambda each: map(int, each), seed)
   for each in seed:
-    print each
+    print(each)
     seg[each] = 1
 
   seg = sitk.BinaryDilate(seg, 5)
@@ -98,9 +99,9 @@ def level_set_cut(image, seed):
   stats.Execute(image, seg)
 
   factor = 1.8
-  lower_threshold = stats.GetMean(1) - factor * stats.GetSigma(1)
-  upper_threshold = stats.GetMean(1) + factor * stats.GetSigma(1)
-  print 'the lower_threshold and upper_threshold :', lower_threshold, upper_threshold
+  lower_threshold = stats.GetMean(1) - factor * stats.GetSigma(1) - math.log(stats.GetMean(1))
+  upper_threshold = stats.GetMean(1) + factor * stats.GetSigma(1) + math.log(stats.GetMean(1))
+  print('the lower_threshold and upper_threshold :', lower_threshold, upper_threshold)
 
   init_ls = sitk.SignedMaurerDistanceMap(seg, insideIsPositive=True, useImageSpacing=True)
   lsFilter = sitk.ThresholdSegmentationLevelSetImageFilter()
@@ -114,11 +115,11 @@ def level_set_cut(image, seed):
   ls = lsFilter.Execute(init_ls, sitk.Cast(image, sitk.sitkFloat32))
 
   assert isinstance(ls, sitk.Image)
-  print ls.GetPixelIDTypeAsString()
-  print ls.GetDimension()
+  print(ls.GetPixelIDTypeAsString())
+  print(ls.GetDimension())
+  # myshow(sitk.LabelOverlay(image, ls>0), 'Level Set Segmentation')
   # myshow(sitk.LabelOverlay(image, sitk.LabelContour(ls>0), 1.0))
-  myshow(sitk.LabelOverlay(image, ls>0), 'Level Set Segmentation')
-  # return sitk.LabelOverlay(image, ls>0)
+  return sitk.LabelOverlay(image, sitk.LabelContour(ls>0), 1.0), ls
 
 
 def relabelling(image):
@@ -127,37 +128,44 @@ def relabelling(image):
   return image - relabeler.Execute(image)
 
 
-def run():
+def demo1():
+  '''
+  anisotropic diffusing ->
+  relabel filting ->
+  hmax contrasting ->
+  level cut thresholding .
+  :return: None
+  '''
   raw_img = sitk.ReadImage(raw_image_name, sitk.sitkUInt8)
   assert isinstance(raw_img, sitk.Image)
-
   liver_label = get_predicted_liver_label()
   raw = get_raw_liver_image(raw_img, liver_label)
   raw = sitk.Cast(raw, sitk.sitkFloat32)
 
   # (a) Anisotropic diffusion
   gradient_filter = sitk.GradientAnisotropicDiffusionImageFilter()
-  gradient_filter.SetNumberOfIterations(15) # default: 15
+  gradient_filter.SetNumberOfIterations(20) # default: 15
   gradient_filter.SetTimeStep(0.0625)
   gradient_filter.SetConductanceParameter(3.0)
   gradient = gradient_filter.Execute(raw)
 
-  # TODO: 效果不好
+  # 增加了relabel滤波
+  gradient = relabelling(sitk.Cast(gradient, sitk.sitkUInt8))
+
   # (b) High contrasting
   hmax_filter = sitk.HMaximaImageFilter()
   hmax = hmax_filter.Execute(gradient)
 
-  # (c) Thresholding
   seed = get_tumor_seed()
   if len(seed) == 0:
-    print 'This image does not have tumor pixels.'
+    print('This image does not have tumor pixels.')
     return
 
-  # 增加了relabel滤波
-  hmax = relabelling(sitk.Cast(hmax, sitk.sitkUInt8))
+  # (c) Thresholding
+  overlay, label = level_set_cut(sitk.Cast(hmax, sitk.sitkUInt8), seed)
+  sitk.WriteImage(overlay, save_path)
+  myshow(sitk.ReadImage(mask_image_name))
 
-  level_set_cut(sitk.Cast(hmax, sitk.sitkUInt8), seed)
-  # myshow(sitk.ReadImage(mask_image_name))
 
 if __name__ == '__main__':
-  run()
+  demo1()
