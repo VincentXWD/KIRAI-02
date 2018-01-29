@@ -1,0 +1,23 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<project version="4">
+  <component name="WebServers">
+    <option name="servers">
+      <webServer id="fbf7e099-339f-442e-85d5-2f7044df5446" name="hci" url="http://10.28.0.214">
+        <fileTransfer host="10.28.0.214" port="22" rootFolder="/home/xwd" accessType="SFTP" password="dfd2dfdddfce" username="xwd">
+          <advancedOptions>
+            <advancedOptions dataProtectionLevel="Private" />
+          </advancedOptions>
+          <option name="port" value="22" />
+        </fileTransfer>
+      </webServer>
+      <webServer id="ac1838c1-a450-4e78-8a43-032068eadcc0" name="qcloud" url="http://123.207.173.126">
+        <fileTransfer host="123.207.173.126" port="22" rootFolder="/home/ubuntu" accessType="SFTP" password="dfd2dfdddfcedf93df9fdf9adf9fdf9adf93df9a" username="ubuntu">
+          <advancedOptions>
+            <advancedOptions dataProtectionLevel="Private" />
+          </advancedOptions>
+          <option name="port" value="22" />
+        </fileTransfer>
+      </webServer>
+    </option>
+  </component>
+</project>

@@ -4,10 +4,10 @@ import SimpleITK as sitk
 from myshow import *
 import math
 
-raw_image_name =   './images/raw_jpg/sample-15/sample-15-slice-1.jpg'
-mask_image_name = './images/mask_png/sample-15/sample-15-slice-1.png'
-pred_image_name = './images/pred_png/sample-15/sample-15-slice-1.png'
-save_path =                                 './sample-15-slice-1.png'
+raw_image_name  =  './images/raw_jpg/sample-102/sample-102-slice-512.jpg'
+mask_image_name = './images/mask_png/sample-102/sample-102-slice-512.png'
+pred_image_name = './images/pred_png/sample-102/sample-102-slice-512.png'
+save_path =                                  './sample-102-slice-512.png'
 
 
 def get_predicted_liver_label():
@@ -84,7 +84,7 @@ def level_set_cut(image, seed):
   seg = sitk.Image(image.GetSize(), sitk.sitkUInt8)
   seg.CopyInformation(image)
 
-  seed = map(lambda each: map(int, each), seed)
+  seed = map(lambda each: list(map(int, each)), seed)
   for each in seed:
     print(each)
     seg[each] = 1
