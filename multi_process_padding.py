@@ -1,7 +1,7 @@
 import multiprocessing as mp
 import path_parser
-import os
 import padding_process
+from my_logging import *
 
 
 def mkdir(path: str) -> None:
@@ -41,7 +41,7 @@ def rbd_realize(pre_pred_png: list, pre_raw_jpg, tmp_result_png: list) -> list:
         raw_jpg[i][0].append([pre_raw_jpg[i][0][j][0], pre_raw_jpg[i][0][j][1]])
         cnt += 1
 
-  print('have', cnt, ' files left.')
+  logger.info('have '+str(cnt)+' files left.')
   return pred_png, raw_jpg
 
 
@@ -61,9 +61,9 @@ def single_process(each: list) -> None:
       pred_path, pred_name = pred[0][j][0], pred[0][j][1]
       raw_path, raw_name = raw[0][j][0], raw[0][j][1]
       save_name = save_path+pred_dir_name+'/'+pred_name
-      print('[Multi Processing]'+pred_path, raw_path, save_name)
-      padding_process.padding_process(raw_path, pred_path, save_name)
-      print('[Multi Processing] saved :' + save_name)
+      logger.info(pred_path+' '+raw_path+' '+save_name)
+      padding_process.padding_process(raw_path+' '+pred_path+' '+save_name)
+      logger.info('saved :' + save_name)
 
 
 def multi_processing_sta1():
@@ -98,6 +98,11 @@ def multi_processing_sta1():
 
 
 def jumping_board(each: list) -> None:
+  '''
+  可以替换成其他函数，保证参数一致即可。
+  :param each:
+  :return:
+  '''
   raw_jpg = each[0]
   pred_png = each[1]
   save_path = each[2]
@@ -107,9 +112,12 @@ def jumping_board(each: list) -> None:
 def multi_processing_sta2():
   # [i][0][j][0] : 目录路径 ; [i][1] : 目录名
   # [i][0][j][1] : 切片名
-  pred_path = './images/pred_png/'
-  save_path = './padded/'
-  raw_path = './images/raw_jpg/'
+  # pred_path = './images/pred_png/'
+  # save_path = './padded/'
+  # raw_path = './images/raw_jpg/'
+  pred_path = './processing/model_output/'
+  save_path = './processing/padded/'
+  raw_path = './processing/raw_image/'
   mkdir(save_path)
 
   pre_raw_jpg = path_parser.get_file_path(raw_path)
@@ -119,10 +127,10 @@ def multi_processing_sta2():
 
   process_count = mp.cpu_count()
 
-  print('[Multi Processing] Task number:', process_count)
+  logger.info('Task number: '+str(process_count))
   flat_task = []
 
-  print('[Multi Processing] Now distributing tasks...')
+  logger.info('Now distributing tasks...')
 
   for i in range(0, len(pred_png)):
     pred_dir_name = pred_png[i][1]
@@ -136,18 +144,19 @@ def multi_processing_sta2():
       save_name = save_path+pred_dir_name+'/'+pred_name
       flat_task.append([raw_path, pred_path, save_name])
 
-  print('[Multi Processing] Task distributed.')
-  print('[Multi Processing] Now processing...')
+  logger.info('Task distributed.')
+  logger.info('Now processing...')
 
   pool = mp.Pool(processes=process_count)
 
   for i in range(0, len(flat_task)):
     pool.apply_async(jumping_board, (flat_task[i], ))
 
-  print('[Multi Processing] Process pool closed.')
+  logger.info('Process pool closed.')
   pool.close()
   pool.join()
-  print('[Multi Processing] Finished.')
+  logger.info('Finished.')
+
 
 if __name__ == '__main__':
   multi_processing_sta2()

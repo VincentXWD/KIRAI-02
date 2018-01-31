@@ -2,6 +2,8 @@
 import SimpleITK as sitk
 from myshow import *
 import math
+from my_logging import *
+
 
 def get_predicted_liver_label(pred_image_name: str) -> sitk.Image:
   image = sitk.ReadImage(pred_image_name, sitk.sitkUInt8)
@@ -67,7 +69,7 @@ def get_tumor_seed(pred_image_name: str) -> list:
   return seed
 
 
-def level_set_cut(image: sitk.Image, seed: list, pred_image_name: str) -> (sitk.Image, sitk.Image):
+def level_set_cut_v1(image: sitk.Image, seed: list, pred_image_name: str) -> (sitk.Image, sitk.Image, int):
   assert isinstance(image, sitk.Image) and image.GetPixelID() == sitk.sitkUInt8
 
   seg = sitk.Image(image.GetSize(), sitk.sitkUInt8)
@@ -76,9 +78,9 @@ def level_set_cut(image: sitk.Image, seed: list, pred_image_name: str) -> (sitk.
   seed = map(lambda each: list(map(int, each)), seed)
   for each in seed:
     seg[each] = 1
-  print('[Image padding]', pred_image_name, 'have', len(list(seed)), 'lesion region(s)')
+  logger.info(pred_image_name+' have '+str(len(list(seed)))+' lesion region(s)')
 
-  seg = sitk.BinaryDilate(seg, 5)
+  seg = sitk.BinaryDilate(seg, 3)
   assert isinstance(seg, sitk.Image)
 
   # myshow(sitk.LabelOverlay(image, seg), title="Initial Seed")
@@ -89,21 +91,72 @@ def level_set_cut(image: sitk.Image, seed: list, pred_image_name: str) -> (sitk.
   factor = 1.8
   lower_threshold = stats.GetMean(1) - factor * stats.GetSigma(1) # - math.log(stats.GetMean(1))
   upper_threshold = stats.GetMean(1) + factor * stats.GetSigma(1) # + math.log(stats.GetMean(1))
-  print('[Image padding]', 'the lower_threshold and upper_threshold :', lower_threshold, upper_threshold)
+  logger.info('the lower_threshold and upper_threshold :'+ \
+              str(lower_threshold)+' '+str(upper_threshold))
+  if lower_threshold == 0 or upper_threshold == 0:
+    logger.warn('Threshold Error. Ignoring...')
+    return image, image, -1
 
   init_ls = sitk.SignedMaurerDistanceMap(seg, insideIsPositive=True, useImageSpacing=True)
   lsFilter = sitk.ThresholdSegmentationLevelSetImageFilter()
   lsFilter.SetLowerThreshold(lower_threshold)
   lsFilter.SetUpperThreshold(upper_threshold)
   lsFilter.SetMaximumRMSError(0.02)
-  lsFilter.SetNumberOfIterations(1000)
+  lsFilter.SetNumberOfIterations(290)
   lsFilter.SetCurvatureScaling(.5)
   lsFilter.SetPropagationScaling(1)
   lsFilter.ReverseExpansionDirectionOn()
   ls = lsFilter.Execute(init_ls, sitk.Cast(image, sitk.sitkFloat32))
 
   assert isinstance(ls, sitk.Image)
-  return sitk.LabelOverlay(image, ls>0), ls
+  return sitk.LabelOverlay(image, ls>0), ls, 1
+
+
+def level_set_cut_v2(image: sitk.Image, seed: list, pred_image_name: str) -> (sitk.Image, int):
+  assert isinstance(image, sitk.Image) and image.GetPixelID() == sitk.sitkUInt8
+  seed = map(lambda each: list(map(int, each)), seed)
+  ft = sitk.Image(image.GetSize(), sitk.sitkUInt8)
+  ft.CopyInformation(image)
+
+  logger.info(pred_image_name+' have '+str(len(list(seed)))+' lesion region(s)')
+
+  stats = sitk.LabelStatisticsImageFilter()
+
+  factor = 1.8
+  lsFilter = sitk.ThresholdSegmentationLevelSetImageFilter()
+  lsFilter.SetMaximumRMSError(0.02)
+  lsFilter.SetNumberOfIterations(500)
+  lsFilter.SetCurvatureScaling(.5)
+  lsFilter.SetPropagationScaling(1)
+  lsFilter.ReverseExpansionDirectionOn()
+
+  ex_flag = False
+  for each in seed:
+    tmp_seg = sitk.Image(image.GetSize(), sitk.sitkUInt8)
+    tmp_seg.CopyInformation(image)
+    tmp_seg[each] = 1
+    tmp_seg = sitk.BinaryDilate(tmp_seg, 3)
+    assert isinstance(tmp_seg, sitk.Image)
+    init_ls = sitk.SignedMaurerDistanceMap(tmp_seg, insideIsPositive=True, useImageSpacing=True)
+
+    stats.Execute(image, tmp_seg)
+    lower_threshold = stats.GetMean(1) - factor * stats.GetSigma(1)  # - math.log(stats.GetMean(1))
+    upper_threshold = stats.GetMean(1) + factor * stats.GetSigma(1)  # + math.log(stats.GetMean(1))
+    logger.info('the lower_threshold and upper_threshold :' + \
+                str(lower_threshold) + ' ' + str(upper_threshold))
+    if lower_threshold == 0 or upper_threshold == 0:
+      logger.warn('Threshold Error. Ignoring...')
+      continue
+    ex_flag = True
+    lsFilter.SetLowerThreshold(lower_threshold)
+    lsFilter.SetUpperThreshold(upper_threshold)
+    ls = lsFilter.Execute(init_ls, sitk.Cast(image, sitk.sitkFloat32))
+    assert isinstance(ls, sitk.Image)
+    ft += ls
+
+  if ex_flag == True:
+    return ft, 1
+  return ft, -1
 
 
 def relabelling(image: sitk.Image) -> sitk.Image:
@@ -157,7 +210,7 @@ def padding_process(raw_image_name: str, pred_image_name: str, save_path: str) -
   '''
   seed = get_tumor_seed(pred_image_name)
   if len(seed) == 0:
-    print('[Image padding]', 'This image does not have tumor pixels.')
+    logger.warn('This image does not have tumor pixels.')
     sitk.WriteImage(sitk.ReadImage(pred_image_name, sitk.sitkUInt8), save_path)
     return
 
@@ -175,9 +228,12 @@ def padding_process(raw_image_name: str, pred_image_name: str, save_path: str) -
   relabel = relabelling(sitk.Cast(gradient, sitk.sitkUInt8))
   hmax_filter = sitk.HMaximaImageFilter()
   hmax = hmax_filter.Execute(relabel)
-
   # (c) Level-set thresholding
-  _, label = level_set_cut(sitk.Cast(hmax, sitk.sitkUInt8), seed, pred_image_name)
+  # _, label, signal = level_set_cut_v1(sitk.Cast(hmax, sitk.sitkUInt8), seed, pred_image_name)
+  label, signal = level_set_cut_v2(sitk.Cast(hmax, sitk.sitkUInt8), seed, pred_image_name)
+  if signal == -1:
+    sitk.WriteImage(sitk.ReadImage(pred_image_name, sitk.sitkUInt8), save_path)
+    return
 
   # (d) Hole filling
   hole_filter = sitk.GrayscaleFillholeImageFilter()
@@ -187,9 +243,12 @@ def padding_process(raw_image_name: str, pred_image_name: str, save_path: str) -
 
 
 def run():
-  raw_image_name = './images/raw_jpg/sample-102/sample-102-slice-512.jpg'
-  pred_image_name = './images/pred_png/sample-102/sample-102-slice-512.png'
-  save_path = './sample-102-slice-512.png'
+  pred_image_name = './processing/model_output/samples/sample-33-slice-536.png'
+  save_path = './processing/padded/samples/sample-33-slice-536.png'
+  raw_image_name = './processing/raw_image/sample/sample-33-slice-536.jpg'
+  # raw_image_name = './images/raw_jpg/sample-102/sample-102-slice-512.jpg'
+  # pred_image_name = './images/pred_png/sample-102/sample-102-slice-512.png'
+  # save_path = './sample-102-slice-512.png'
   padding_process(raw_image_name, pred_image_name, save_path)
 
 
